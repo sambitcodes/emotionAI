@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h2 class="mb-4">Twitter/X Emotion Analysis</h2>
+        <div class="card">
+            <div class="card-body">
+                <form id="twitterAnalysisForm">
+                    <div class="mb-3">
+                        <label for="keywordInput" class="form-label">Enter keyword to search tweets:</label>
+                        <input type="text" class="form-control" id="keywordInput" name="keyword" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Analyze Tweets</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4" id="tweetResultsSection" style="display: none;">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5>Analysis Results</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Date & Time</th>
+                                <th>Tweet</th>
+                                <th>Emotion</th>
+                                <th>Confidence</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tweetTableBody">
+                            <!-- Tweet results will be populated here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-12 mt-4">
+        <div class="card">
+            <div class="card-header">
+                <h5>Emotion Distribution</h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="position: relative; height:50vh; width:100%">
+                    <canvas id="tweetEmotionChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('twitterAnalysisForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const keyword = formData.get('keyword');
+    
+    // Show loading indicator
+    this.querySelector('button[type="submit"]').innerHTML = 
+        '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Loading...';
+    this.querySelector('button[type="submit"]').disabled = true;
+    
+    fetch('/analyze_tweets', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Reset button
+        this.querySelector('button[type="submit"]').innerHTML = 'Analyze Tweets';
+        this.querySelector('button[type="submit"]').disabled = false;
+        
+        if (data.error) {
+            alert(data.error);
+            return
+        }
+        
+        // Display results
+        document.getElementById('tweetResultsSection').style.display = 'block';
+        
+        const tableBody = document.getElementById('tweetTableBody');
+        tableBody.innerHTML = '';
+        
+        // Track emotions for summary chart
+        const emotionCounts = {};
+        
+        // Populate table with tweet data
+        data.forEach(tweet => {
+            const row = document.createElement('tr');
+            
+            // Get primary emotion and confidence
+            const primaryEmotion = tweet.emotions.primary_emotion;
+            const confidence = tweet.emotions.confidence;
+            
+            // Update emotion counts
+            if (emotionCounts[primaryEmotion]) {
+                emotionCounts[primaryEmotion]++;
+            } else {
+                emotionCounts[primaryEmotion] = 1;
+            }
+            
+            // Add row data
+            row.innerHTML = `
+                <td>@${tweet.username}</td>
+                <td>${tweet.timestamp}</td>
+                <td>${tweet.text}</td>
+                <td><span class="badge bg-primary">${primaryEmotion}</span></td>
+                <td>${(confidence * 100).toFixed(2)}%</td>
+            `;
+            
+            tableBody.appendChild(row);
+        });
+        
+        // Create summary chart
+        createTweetEmotionChart(emotionCounts);
+    })
+    .catch(error => {
+        // Reset button
+        this.querySelector('button[type="submit"]').innerHTML = 'Analyze Tweets';
+        this.querySelector('button[type="submit"]').disabled = false;
+        
+        console.error('Error:', error);
+        alert('An error occurred while analyzing tweets.');
+    });
+});
+
+function createTweetEmotionChart(emotionCounts) {
+    const ctx = document.getElementById('tweetEmotionChart').getContext('2d');
+    
+    // Destroy previous chart if it exists
+    if (window.tweetEmotionChart) {
+        window.tweetEmotionChart.destroy();
+    }
+    
+    const labels = Object.keys(emotionCounts);
+    const values = Object.values(emotionCounts);
+    
+    // Generate colors
+    const backgroundColors = labels.map((_, i) => {
+        const colors = [
+            'rgba(255, 99, 132, 0.6)',
+            'rgba(54, 162, 235, 0.6)',
+            'rgba(255, 206, 86, 0.6)',
+            'rgba(75, 192, 192, 0.6)',
+            'rgba(153, 102, 255, 0.6)',
+            'rgba(255, 159, 64, 0.6)',
+            'rgba(199, 199, 199, 0.6)'
+        ];
+        return colors[i % colors.length];
+    });
+    
+    const borderColors = backgroundColors.map(color => color.replace('0.6', '1'));
+    
+    window.tweetEmotionChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: values,
+                backgroundColor: backgroundColors,
+                borderColor: borderColors,
+                borderWidth: 1
+            }]
+        },
+        options: {
+            plugins: {
+                legend: {
+                    position: 'right'
+                },
+                title: {
+                    display: true,
+                    text: 'Tweet Emotion Distribution'
+                }
+            }
+        }
+    });
+}
+</script>
+{% endblock %}

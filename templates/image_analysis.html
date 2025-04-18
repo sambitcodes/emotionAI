@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h2 class="mb-4">Image Emotion Analysis</h2>
+        <div class="card">
+            <div class="card-body">
+                <form id="imageAnalysisForm">
+                    <div class="mb-3">
+                        <label for="imageInput" class="form-label">Upload an image:</label>
+                        <input class="form-control" type="file" id="imageInput" name="image" accept="image/png, image/jpeg" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="modelSelect" class="form-label">Select model:</label>
+                        <select class="form-select" id="modelSelect" name="model">
+                            {% for model in models %}
+                                <option value="{{ model }}">{{ model }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Analyze</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4" id="imageResultsSection" style="display: none;">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5>Analysis Results</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="image-container" style="max-width: 100%;">
+                            <img id="analyzedImage" src="" alt="Analyzed Image" class="img-fluid rounded">
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Detected Faces: <span id="faceCount" class="badge bg-info"></span></h6>
+                        <div id="emotionsContainer">
+                            <!-- Emotion results will be populated here -->
+                        </div>
+                        <div class="chart-container mt-3" style="position: relative; height:30vh; width:100%">
+                            <canvas id="imageEmotionChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('imageAnalysisForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    
+    fetch('/analyze_image', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert(data.error);
+            return;
+        }
+        
+        // Display results
+        document.getElementById('imageResultsSection').style.display = 'block';
+        document.getElementById('analyzedImage').src = '/static/' + data.image_path;
+        document.getElementById('faceCount').textContent = data.face_count;
+        
+        const emotionsContainer = document.getElementById('emotionsContainer');
+        emotionsContainer.innerHTML = '';
+        
+        // Display emotion results for each detected face
+        data.face_emotions.forEach((face, index) => {
+            const faceDiv = document.createElement('div');
+            faceDiv.className = 'mb-3';
+            
+            const faceHeader = document.createElement('h6');
+            faceHeader.textContent = `Face ${index + 1}:`;
+            faceDiv.appendChild(faceHeader);
+            
+            const emotionBadge = document.createElement('span');
+            emotionBadge.className = 'badge bg-primary ms-2';
+            emotionBadge.textContent = face.primary_emotion;
+            faceHeader.appendChild(emotionBadge);
+            
+            const confidenceText = document.createElement('p');
+            confidenceText.textContent = `Confidence: ${(face.confidence * 100).toFixed(2)}%`;
+            faceDiv.appendChild(confidenceText);
+            
+            emotionsContainer.appendChild(faceDiv);
+        });
+        
+        // Create chart for first face (or average if specified)
+        if (data.face_emotions.length > 0) {
+            createImageEmotionChart(data.face_emotions[0].all_emotions);
+        }
+    })
+    // .catch(error => {
+    //     console.error('Error:', error);
+    //     alert('An error occurred while analyzing the image.');
+    // });
+});
+
+function createImageEmotionChart(emotions) {
+    const ctx = document.getElementById('imageEmotionChart').getContext('2d');
+    
+    // Destroy previous chart if it exists
+    if (window.imageEmotionChart) {
+        window.imageEmotionChart.destroy();
+    }
+    
+    const labels = Object.keys(emotions);
+    const values = Object.values(emotions);
+    
+    window.imageEmotionChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Confidence Score',
+                data: values.map(v => v * 100),
+                backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    max: 100,
+                    title: {
+                        display: true,
+                        text: 'Confidence (%)'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                },
+                title: {
+                    display: true,
+                    text: 'Emotion Confidence Scores'
+                }
+            }
+        }
+    });
+}
+</script>
+{% endblock %}
