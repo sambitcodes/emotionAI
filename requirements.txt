@@ -19,3 +19,7 @@ scikit-learn
 deepface
 tf-keras
 python-dotenv
+beautifulsoup4
+requests
+pillow
+fake-useragent
